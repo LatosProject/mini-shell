@@ -1,0 +1,3 @@
+/home/latos/project/mini-shell/CMakeFiles/mini-shell.dir
+/home/latos/project/mini-shell/CMakeFiles/edit_cache.dir
+/home/latos/project/mini-shell/CMakeFiles/rebuild_cache.dir
