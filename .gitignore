@@ -1,0 +1,12 @@
+.vscode/
+.test/
+.history/
+.build/
+CMakeCache.txt
+CMakeFiles/
+.vscode
+.claude
+Makefile
+cmake_install.cmake
+.cache
+build

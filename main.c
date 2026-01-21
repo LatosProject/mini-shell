@@ -40,10 +40,65 @@ void set_var(const char *name, int value) {
 
 int tokenize(char *line, char *tokens[]) {
   int count = 0;
-  char *tok = strtok(line, " \t\n");
-  while (tok && count < MAX_TOKENS) {
-    tokens[count++] = tok;
-    tok = strtok(NULL, " \t\n");
+  char *p = line;
+
+  while (*p) {
+    // 跳过空格
+    if (isspace(*p)) {
+      p++;
+      continue;
+    }
+    if (*p == '\0')
+      break;
+    if (*p == '=' && *(p + 1) == '=') {
+      tokens[count] = malloc(3);
+      tokens[count][0] = '=';
+      tokens[count][1] = '=';
+      tokens[count][2] = '\0';
+      p += 2;
+      count++;
+      continue;
+    }
+    if (*p == '=' || *p == '*' || *p == '/' || *p == '%' || *p == '+' ||
+        *p == '-') {
+      tokens[count] = malloc(2);
+      tokens[count][0] = *p;
+      tokens[count][1] = '\0';
+      p++;
+      count++;
+      continue;
+    }
+    char *start = p;
+    if (*p != '"' && *p != '{' && *p != '}' && *p != '=' && *p != '*' &&
+        *p != '/' && *p != '%' && *p != '+' && *p != '-') {
+      while (*p && !isspace(*p) && *p != '=' && *p != '*' && *p != '/' &&
+             *p != '%' && *p != '+' && *p != '-') {
+        p++;
+      }
+      int len = p - start;
+      tokens[count] = malloc(len + 1);
+      memcpy(tokens[count], start, len);
+      tokens[count][len] = '\0';
+      count++;
+    }
+    if (*p == '"' || *p == '{') {
+      p++;
+      start = p;
+      while (*p != '"' && *p != '}') {
+        if (*p == '\0')
+          break;
+        p++;
+      }
+      int len = p - start;
+      tokens[count] = malloc(len + 1);
+      memcpy(tokens[count], start, len);
+      tokens[count][len] = '\0';
+      count++;
+      p++;
+      if (*p == '"' || *p == '}')
+
+        p++;
+    }
   }
   return count;
 }
@@ -113,45 +168,92 @@ void handle_line(char *line) {
   if (count == 0)
     return;
 
+  if (count == 3 && strcmp(tokens[1], "=")) {
+    set_var(tokens[0], atoi(tokens[2]));
+    return;
+  }
+
+  if (count == 2 && strcmp(tokens[0], "echo") == 0) {
+    printf("%s\n", tokens[1]);
+    return;
+  }
+  if (count >= 4 && strcmp(tokens[0], "while") == 0 &&
+      strcmp(tokens[2], "==") == 0) {
+    int left_value = eval_expr(&tokens[1], 1);
+    int right_value = eval_expr(&tokens[3], 1);
+    while (left_value == right_value) {
+      if (count > 4) {
+
+        int total_len = 0;
+        for (int i = 4; i < count; i++) {
+          total_len += strlen(tokens[i]) + 1;
+        }
+        char *tmp = malloc(total_len + 1);
+        tmp[0] = '\0';
+
+        for (int i = 4; i < count; i++) {
+          strcat(tmp, tokens[i]);
+          if (i < count - 1)
+            strcat(tmp, " ");
+        }
+
+        handle_line(tmp);
+      } else {
+        printf("false\n");
+        return;
+      }
+    }
+
+    return;
+  }
+
   // IF 语句: if a == 5 命令
   if (count >= 4 && strcmp(tokens[0], "if") == 0 &&
       strcmp(tokens[2], "==") == 0) {
     int left_value = eval_expr(&tokens[1], 1);
     int right_value = eval_expr(&tokens[3], 1);
     if (left_value == right_value) {
-      printf("true\n");
-      // 如果有第5个token，执行它
-      // handle_line(tokens[4]);  // 暂时注释，因为tokens[4]不是完整的命令行
-    } else {
-      printf("false\n");
-      return;
+      if (count > 4) {
+        int total_len = 0;
+        for (int i = 4; i < count; i++) {
+          total_len += strlen(tokens[i]) + 1;
+        }
+        char *tmp = malloc(total_len + 1);
+        tmp[0] = '\0';
+
+        for (int i = 4; i < count; i++) {
+          strcat(tmp, tokens[i]);
+          if (i < count - 1)
+            strcat(tmp, " ");
+        }
+
+        handle_line(tmp);
+      } else {
+        printf("false\n");
+        return;
+      }
+      return; // 添加 return 防止继续执行
     }
-    return; // 添加 return 防止继续执行
   }
-  if (count == 3) {
-    set_var(tokens[0], atoi((tokens[2])));
+  // 算数运算符
+  if (count >= 3 && strcmp(tokens[1], "=") == 0) {
+    // printf("count = %d\n", count);
+    char *name = tokens[0];
+    int val = eval_expr(&tokens[2], count - 2);
+    Var *v = get_var(name);
+    if (v) {
+      v->value = val;
+    } else {
+      if (var_count < MAX_VARS) {
+        strcpy(vars[var_count].name, name);
+        vars[var_count].value = val;
+        var_count++;
+      } else {
+        printf("Error: too many variables\n");
+      }
+    }
     return;
   }
-  if (count >= 4)
-    // 算数运算符
-    if (count >= 3 && strcmp(tokens[1], "=") == 0) {
-      // printf("count = %d\n", count);
-      char *name = tokens[0];
-      int val = eval_expr(&tokens[2], count - 2);
-      Var *v = get_var(name);
-      if (v) {
-        v->value = val;
-      } else {
-        if (var_count < MAX_VARS) {
-          strcpy(vars[var_count].name, name);
-          vars[var_count].value = val;
-          var_count++;
-        } else {
-          printf("Error: too many variables\n");
-        }
-      }
-      return;
-    }
   int result = eval_expr(tokens, count);
   printf("%d\n", result);
 }
