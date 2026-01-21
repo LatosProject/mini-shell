@@ -81,10 +81,10 @@ int tokenize(char *line, char *tokens[]) {
       tokens[count][len] = '\0';
       count++;
     }
-    if (*p == '"' || *p == '{') {
+    if (*p == '"') {
       p++;
       start = p;
-      while (*p != '"' && *p != '}') {
+      while (*p != '"') {
         if (*p == '\0')
           break;
         p++;
@@ -95,7 +95,25 @@ int tokenize(char *line, char *tokens[]) {
       tokens[count][len] = '\0';
       count++;
       p++;
-      if (*p == '"' || *p == '}')
+      if (*p == '"')
+
+        p++;
+    }
+    if (*p == '{') {
+      p++;
+      start = p;
+      while (*p != '}') {
+        if (*p == '\0')
+          break;
+        p++;
+      }
+      int len = p - start;
+      tokens[count] = malloc(len + 1);
+      memcpy(tokens[count], start, len);
+      tokens[count][len] = '\0';
+      count++;
+      p++;
+      if (*p == '}')
 
         p++;
     }
@@ -168,13 +186,18 @@ void handle_line(char *line) {
   if (count == 0)
     return;
 
-  if (count == 3 && strcmp(tokens[1], "=")) {
+  if (count == 3 && strcmp(tokens[1], "=") == 0) {
     set_var(tokens[0], atoi(tokens[2]));
     return;
   }
 
   if (count == 2 && strcmp(tokens[0], "echo") == 0) {
-    printf("%s\n", tokens[1]);
+    Var *v = get_var(tokens[1]);
+    if (v) {
+      printf("%d\n", v->value);
+    } else {
+      printf("%s\n", tokens[1]);
+    }
     return;
   }
   if (count >= 4 && strcmp(tokens[0], "while") == 0 &&
@@ -183,21 +206,7 @@ void handle_line(char *line) {
     int right_value = eval_expr(&tokens[3], 1);
     while (left_value == right_value) {
       if (count > 4) {
-
-        int total_len = 0;
-        for (int i = 4; i < count; i++) {
-          total_len += strlen(tokens[i]) + 1;
-        }
-        char *tmp = malloc(total_len + 1);
-        tmp[0] = '\0';
-
-        for (int i = 4; i < count; i++) {
-          strcat(tmp, tokens[i]);
-          if (i < count - 1)
-            strcat(tmp, " ");
-        }
-
-        handle_line(tmp);
+        handle_line(tokens[4]);
       } else {
         printf("false\n");
         return;
@@ -214,25 +223,12 @@ void handle_line(char *line) {
     int right_value = eval_expr(&tokens[3], 1);
     if (left_value == right_value) {
       if (count > 4) {
-        int total_len = 0;
-        for (int i = 4; i < count; i++) {
-          total_len += strlen(tokens[i]) + 1;
-        }
-        char *tmp = malloc(total_len + 1);
-        tmp[0] = '\0';
-
-        for (int i = 4; i < count; i++) {
-          strcat(tmp, tokens[i]);
-          if (i < count - 1)
-            strcat(tmp, " ");
-        }
-
-        handle_line(tmp);
+        handle_line(tokens[4]);
+        return;
       } else {
         printf("false\n");
         return;
       }
-      return; // 添加 return 防止继续执行
     }
   }
   // 算数运算符
