@@ -5,7 +5,7 @@
 #define LINE_LEN 256
 #define MAX_TOKENS 64
 #define MAX_VARS 32
-
+void handle_line(char *line);
 typedef struct {
   char name[32];
   int value;
@@ -59,8 +59,17 @@ int tokenize(char *line, char *tokens[]) {
       count++;
       continue;
     }
-    if (*p == '=' || *p == '*' || *p == '/' || *p == '%' || *p == '+' ||
-        *p == '-') {
+    if (*p == '!' && *(p + 1) == '=') {
+      tokens[count] = malloc(3);
+      tokens[count][0] = '!';
+      tokens[count][1] = '=';
+      tokens[count][2] = '\0';
+      p += 2;
+      count++;
+      continue;
+    }
+    if (*p == ';' || *p == '=' || *p == '*' || *p == '/' || *p == '%' ||
+        *p == '+' || *p == '-') {
       tokens[count] = malloc(2);
       tokens[count][0] = *p;
       tokens[count][1] = '\0';
@@ -69,10 +78,11 @@ int tokenize(char *line, char *tokens[]) {
       continue;
     }
     char *start = p;
-    if (*p != '"' && *p != '{' && *p != '}' && *p != '=' && *p != '*' &&
-        *p != '/' && *p != '%' && *p != '+' && *p != '-') {
-      while (*p && !isspace(*p) && *p != '=' && *p != '*' && *p != '/' &&
-             *p != '%' && *p != '+' && *p != '-') {
+    if (*p != ';' && *p != '"' && *p != '{' && *p != '}' && *p != '=' &&
+        *p != '*' && *p != '/' && *p != '%' && *p != '+' && *p != '-') {
+      while (*p && !isspace(*p) && *p != '{' && *p != '}' && *p != ';' &&
+             *p != '=' && *p != '*' && *p != '/' && *p != '%' && *p != '+' &&
+             *p != '-') {
         p++;
       }
       int len = p - start;
@@ -96,16 +106,24 @@ int tokenize(char *line, char *tokens[]) {
       count++;
       p++;
       if (*p == '"')
-
         p++;
     }
     if (*p == '{') {
       p++;
       start = p;
-      while (*p != '}') {
-        if (*p == '\0')
-          break;
-        p++;
+      int depth = 1;
+      while (*p && depth > 0) {
+        if (*p == '{') {
+          depth++;
+        } else if (*p == '}') {
+          depth--;
+        }
+        if (depth > 0)
+          p++;
+      }
+      if (depth > 0) {
+        printf("error: unmatched '{'\n");
+        return -1;
       }
       int len = p - start;
       tokens[count] = malloc(len + 1);
@@ -113,9 +131,6 @@ int tokenize(char *line, char *tokens[]) {
       tokens[count][len] = '\0';
       count++;
       p++;
-      if (*p == '}')
-
-        p++;
     }
   }
   return count;
@@ -180,12 +195,7 @@ int eval_expr(char *tokens[], int count) {
   return result;
 }
 
-void handle_line(char *line) {
-  char *tokens[MAX_TOKENS];
-  int count = tokenize(line, tokens);
-  if (count == 0)
-    return;
-
+void execute(char *tokens[], int count) {
   if (count == 3 && strcmp(tokens[1], "=") == 0) {
     set_var(tokens[0], atoi(tokens[2]));
     return;
@@ -201,26 +211,54 @@ void handle_line(char *line) {
     return;
   }
   if (count >= 4 && strcmp(tokens[0], "while") == 0 &&
-      strcmp(tokens[2], "==") == 0) {
-    int left_value = eval_expr(&tokens[1], 1);
-    int right_value = eval_expr(&tokens[3], 1);
-    while (left_value == right_value) {
-      if (count > 4) {
-        handle_line(tokens[4]);
-      } else {
-        printf("false\n");
-        return;
+      (strcmp(tokens[2], "==") == 0 || strcmp(tokens[2], "!=") == 0)) {
+    if (strcmp(tokens[2], "!=") == 0) {
+      int left_value = eval_expr(&tokens[1], 1);
+      int right_value = eval_expr(&tokens[3], 1);
+      while (left_value != right_value) {
+        if (count > 4) {
+          handle_line(tokens[4]);
+          left_value = eval_expr(&tokens[1], 1);
+          right_value = eval_expr(&tokens[3], 1);
+        } else {
+          printf("false\n");
+          return;
+        }
+      }
+    } else {
+      int left_value = eval_expr(&tokens[1], 1);
+      int right_value = eval_expr(&tokens[3], 1);
+      while (left_value == right_value) {
+        if (count > 4) {
+          handle_line(tokens[4]);
+          left_value = eval_expr(&tokens[1], 1);
+          right_value = eval_expr(&tokens[3], 1);
+        } else {
+          printf("false\n");
+          return;
+        }
       }
     }
-
     return;
   }
 
   // IF 语句: if a == 5 命令
   if (count >= 4 && strcmp(tokens[0], "if") == 0 &&
-      strcmp(tokens[2], "==") == 0) {
+          (strcmp(tokens[2], "==") == 0) ||
+      strcmp(tokens[2], "!=") == 0) {
     int left_value = eval_expr(&tokens[1], 1);
     int right_value = eval_expr(&tokens[3], 1);
+    if (strcmp(tokens[2], "!=") == 0) {
+      if (left_value != right_value) {
+        if (count > 4) {
+          handle_line(tokens[4]);
+          return;
+        } else {
+          printf("false\n");
+          return;
+        }
+      }
+    }
     if (left_value == right_value) {
       if (count > 4) {
         handle_line(tokens[4]);
@@ -233,7 +271,6 @@ void handle_line(char *line) {
   }
   // 算数运算符
   if (count >= 3 && strcmp(tokens[1], "=") == 0) {
-    // printf("count = %d\n", count);
     char *name = tokens[0];
     int val = eval_expr(&tokens[2], count - 2);
     Var *v = get_var(name);
@@ -250,10 +287,37 @@ void handle_line(char *line) {
     }
     return;
   }
-  int result = eval_expr(tokens, count);
-  printf("%d\n", result);
 }
 
+void handle_line(char *line) {
+  char *tokens[MAX_TOKENS];
+  int count = tokenize(line, tokens);
+
+  // 调试输出
+  printf("count = %d\n", count);
+  for (int i = 0; i < count; i++) {
+    printf("token[%d] = '%s'\n", i, tokens[i]);
+  }
+
+  if (count == 0)
+    return;
+  int start = 0;
+  if (strcmp(tokens[0], "if") == 0 || strcmp(tokens[0], "while") == 0) {
+    // Handle if statements
+    execute(tokens, count);
+    return;
+  }
+
+  for (int i = 0; i < count; i++) {
+    if (i == count - 1 && (strcmp(tokens[i], ";") != 0)) {
+      printf("error: missing ';' at the end\n");
+      return;
+    } else if ((strcmp(tokens[i], ";")) == 0) {
+      execute(tokens, i);
+      start = i + 1;
+    }
+  }
+}
 int main() {
   char line[LINE_LEN];
 
