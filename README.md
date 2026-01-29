@@ -10,8 +10,14 @@ make
 
 ## 运行
 
+交互模式：
 ```bash
 ./mini-shell
+```
+
+执行脚本文件：
+```bash
+./mini-shell script.msh
 ```
 
 ## 功能特性
